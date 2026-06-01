@@ -1,0 +1,32 @@
+# --- Segredos (NUNCA versionar) ---
+.env
+.env.*
+!.env.example
+
+# --- Ambiente Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Binarios baixados em runtime ---
+bin/
+
+# --- Saida de downloads ---
+downloads/
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+
+# --- Sistema operacional ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Logs ---
+*.log

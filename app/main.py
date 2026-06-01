@@ -1,0 +1,258 @@
+"""
+API FastAPI do SpotifyConverter.
+
+Fluxo:
+  1. POST /api/jobs        { url, bitrate }  -> cria job, devolve faixas
+  2. GET  /api/jobs/{id}/events  (SSE)       -> progresso em tempo real
+  3. GET  /api/jobs/{id}/file/{index}        -> baixa um MP3
+  4. GET  /api/jobs/{id}/zip                 -> baixa tudo num .zip
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import threading
+import time
+import uuid
+import zipfile
+from dataclasses import asdict, dataclass, field
+from io import BytesIO
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from dotenv import load_dotenv
+
+from .downloader import Downloader, find_ffmpeg
+from .resolver import resolve, using_official_api
+from .spotify import SpotifyError, Track
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DOWNLOAD_DIR = BASE_DIR / "downloads"
+WEB_DIR = BASE_DIR / "web"
+DOWNLOAD_DIR.mkdir(exist_ok=True)
+
+app = FastAPI(title="SpotifyConverter", version="1.0.0")
+
+
+# --------------------------------------------------------------------------- modelos
+
+
+class JobRequest(BaseModel):
+    url: str
+    bitrate: str = "320"
+
+
+@dataclass
+class TrackState:
+    title: str
+    artist: str
+    cover_url: str
+    duration: str
+    status: str = "pending"  # pending | working | done | error
+    progress: float = 0.0
+    message: str = ""
+    filename: str = ""
+
+
+@dataclass
+class Job:
+    id: str
+    kind: str
+    name: str
+    cover_url: str
+    bitrate: str
+    tracks: list[TrackState] = field(default_factory=list)
+    _raw: list[Track] = field(default_factory=list)
+    status: str = "queued"  # queued | running | done | error
+    error: str = ""
+
+
+JOBS: dict[str, Job] = {}
+
+
+# --------------------------------------------------------------------------- worker
+
+
+def _run_job(job: Job) -> None:
+    job.status = "running"
+    try:
+        dl = Downloader(DOWNLOAD_DIR / job.id, bitrate=job.bitrate)
+    except RuntimeError as exc:
+        job.status = "error"
+        job.error = str(exc)
+        for ts in job.tracks:
+            ts.status = "error"
+            ts.message = str(exc)
+        return
+
+    for i, (state, raw) in enumerate(zip(job.tracks, job._raw)):
+        state.status = "working"
+        state.message = "Iniciando…"
+
+        def cb(pct: float, msg: str, _state=state) -> None:
+            _state.progress = round(pct, 1)
+            _state.message = msg
+
+        try:
+            result = dl.download_track(raw, cb)
+            state.status = "done"
+            state.progress = 100.0
+            state.message = "Concluído"
+            state.filename = result.path.name
+        except Exception as exc:  # noqa: BLE001 — uma faixa que falha não derruba o resto
+            state.status = "error"
+            state.message = str(exc)[:300]
+
+    job.status = "done"
+
+
+# --------------------------------------------------------------------------- rotas
+
+
+@app.get("/api/health")
+def health() -> dict:
+    return {
+        "ok": True,
+        "ffmpeg": find_ffmpeg() is not None,
+        "source": "api" if using_official_api() else "embed",
+    }
+
+
+@app.post("/api/jobs")
+def create_job(req: JobRequest) -> dict:
+    try:
+        collection = resolve(req.url)
+    except SpotifyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    bitrate = req.bitrate if req.bitrate in {"128", "192", "256", "320"} else "320"
+    job_id = uuid.uuid4().hex[:12]
+    job = Job(
+        id=job_id,
+        kind=collection.kind,
+        name=collection.name,
+        cover_url=collection.cover_url,
+        bitrate=bitrate,
+        _raw=collection.tracks,
+        tracks=[
+            TrackState(
+                title=t.title,
+                artist=t.artist,
+                cover_url=t.cover_url,
+                duration=t.duration_str,
+            )
+            for t in collection.tracks
+        ],
+    )
+    JOBS[job_id] = job
+
+    threading.Thread(target=_run_job, args=(job,), daemon=True).start()
+
+    return {
+        "id": job.id,
+        "kind": job.kind,
+        "name": job.name,
+        "cover_url": job.cover_url,
+        "tracks": [
+            {"title": t.title, "artist": t.artist, "cover_url": t.cover_url, "duration": t.duration}
+            for t in job.tracks
+        ],
+    }
+
+
+def _snapshot(job: Job) -> dict:
+    return {
+        "status": job.status,
+        "error": job.error,
+        "tracks": [
+            {
+                "status": t.status,
+                "progress": t.progress,
+                "message": t.message,
+                "filename": t.filename,
+            }
+            for t in job.tracks
+        ],
+    }
+
+
+@app.get("/api/jobs/{job_id}/events")
+async def job_events(job_id: str, request: Request) -> StreamingResponse:
+    job = JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+
+    async def stream():
+        last = None
+        while True:
+            # se o navegador fechou a aba/foi embora, encerra sem escrever no socket morto
+            if await request.is_disconnected():
+                break
+            snap = _snapshot(job)
+            payload = json.dumps(snap, ensure_ascii=False)
+            if payload != last:
+                yield f"data: {payload}\n\n"
+                last = payload
+            if job.status in {"done", "error"}:
+                break
+            await asyncio.sleep(0.4)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/jobs/{job_id}/file/{index}")
+def get_file(job_id: str, index: int) -> FileResponse:
+    job = JOBS.get(job_id)
+    if not job or index < 0 or index >= len(job.tracks):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    state = job.tracks[index]
+    if state.status != "done" or not state.filename:
+        raise HTTPException(status_code=409, detail="Faixa ainda não está pronta")
+    path = DOWNLOAD_DIR / job.id / state.filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo não existe mais")
+    return FileResponse(path, media_type="audio/mpeg", filename=state.filename)
+
+
+@app.get("/api/jobs/{job_id}/zip")
+def get_zip(job_id: str) -> StreamingResponse:
+    job = JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    done = [t for t in job.tracks if t.status == "done" and t.filename]
+    if not done:
+        raise HTTPException(status_code=409, detail="Nenhuma faixa pronta ainda")
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for t in done:
+            path = DOWNLOAD_DIR / job.id / t.filename
+            if path.exists():
+                zf.write(path, arcname=t.filename)
+    buf.seek(0)
+
+    safe = "".join(c for c in job.name if c.isalnum() or c in " -_").strip() or "spotify"
+    headers = {"Content-Disposition": f'attachment; filename="{safe}.zip"'}
+    return StreamingResponse(buf, media_type="application/zip", headers=headers)
+
+
+# --------------------------------------------------------------------------- frontend
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> HTMLResponse:
+    return HTMLResponse((WEB_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
