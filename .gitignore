@@ -1,9 +1,9 @@
-# --- Segredos (NUNCA versionar) ---
+# --- Secrets (NEVER commit) ---
 .env
 .env.*
 !.env.example
 
-# --- Ambiente Python ---
+# --- Python environment ---
 .venv/
 venv/
 __pycache__/
@@ -11,10 +11,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
-# --- Binarios baixados em runtime ---
+# --- Binaries downloaded at runtime ---
 bin/
 
-# --- Saida de downloads ---
+# --- Download output ---
 downloads/
 
 # --- IDE / Editor ---
@@ -22,7 +22,7 @@ downloads/
 .idea/
 *.swp
 
-# --- Sistema operacional ---
+# --- Operating system ---
 Thumbs.db
 ehthumbs.db
 Desktop.ini

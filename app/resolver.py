@@ -1,12 +1,12 @@
 """
-Resolve um link do Spotify numa Collection, escolhendo a melhor fonte:
+Resolve a Spotify link into a Collection, choosing the best source:
 
-  • Se houver credenciais (SPOTIFY_CLIENT_ID/SECRET) -> Web API oficial
-    (playlists/álbuns completos, metadados ricos).
-  • Caso contrário -> scraping da página de embed (sem cadastro).
+  • If credentials are present (SPOTIFY_CLIENT_ID/SECRET) -> official Web API
+    (full playlists/albums, richer metadata).
+  • Otherwise -> embed-page scraping (no sign-up).
 
-Se a API oficial falhar por algum motivo, ainda tentamos o embed como rede
-de segurança.
+If the official API fails for some reason, we still fall back to the embed as a
+safety net.
 """
 from __future__ import annotations
 
@@ -37,6 +37,6 @@ def resolve(url: str) -> Collection:
         try:
             return client.get_collection(url)
         except SpotifyError:
-            # cai pro embed se a API recusar (ex.: playlist privada do usuário)
+            # fall back to the embed if the API refuses (e.g. a private playlist)
             pass
     return _embed_collection(url)

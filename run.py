@@ -1,10 +1,10 @@
 """
-Ponto de entrada do servidor.
+Server entry point.
 
-No Windows trocamos o event loop padrão (Proactor) pelo Selector: o Proactor
-emite mensagens barulhentas de 'socket.send() raised exception' toda vez que um
-download/stream é cancelado pelo navegador. Funcionalmente é inofensivo, mas
-polui o terminal. O Selector lida com desconexões silenciosamente.
+On Windows we swap the default event loop (Proactor) for the Selector one: the
+Proactor emits noisy 'socket.send() raised exception' messages whenever a
+download/stream is cancelled by the browser. It is functionally harmless but
+clutters the terminal. The Selector loop handles disconnects silently.
 """
 from __future__ import annotations
 

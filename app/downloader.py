@@ -1,6 +1,7 @@
 """
-Motor de download: acha a faixa no YouTube, baixa o melhor áudio com yt-dlp,
-converte pra MP3 com ffmpeg e grava as tags ID3 (título/artista/álbum) + capa.
+Download engine: finds the track on YouTube, downloads the best audio with
+yt-dlp, converts it to MP3 with ffmpeg and writes ID3 tags (title/artist/album)
+plus the album cover.
 """
 from __future__ import annotations
 
@@ -18,11 +19,11 @@ from mutagen.mp3 import MP3
 
 from .spotify import Track
 
-ProgressCb = Callable[[float, str], None]  # (porcentagem 0-100, mensagem)
+ProgressCb = Callable[[float, str], None]  # (percent 0-100, message)
 
 
 def find_ffmpeg() -> Optional[str]:
-    """Localiza o ffmpeg: no PATH ou na pasta ./bin do projeto."""
+    """Locate ffmpeg: on PATH or in the project's ./bin folder."""
     exe = shutil.which("ffmpeg")
     if exe:
         return os.path.dirname(exe)
@@ -34,35 +35,35 @@ def find_ffmpeg() -> Optional[str]:
 
 
 def _sanitize(name: str) -> str:
-    """Remove caracteres inválidos para nome de arquivo no Windows."""
+    """Strip characters that are invalid in Windows filenames."""
     name = re.sub(r'[<>:"/\\|?*]', "", name)
     name = re.sub(r"\s+", " ", name).strip()
-    return name[:180] or "faixa"
+    return name[:180] or "track"
 
 
-# Palavras que indicam que o vídeo NÃO é a faixa de áudio limpa.
+# Words that signal the video is NOT the clean audio track.
 _BAD_WORDS = re.compile(
-    r"\b(video|videoclipe|clipe|ao vivo|live|en vivo|cover|reaction|react|"
+    r"\b(video|videoclip|clip|live|en vivo|cover|reaction|react|"
     r"sped up|slowed|nightcore|8d|karaoke|instrumental|tutorial|reverb|mashup)\b",
     re.IGNORECASE,
 )
-# Sinais de que É a faixa de áudio oficial.
-_GOOD_WORDS = re.compile(r"(official audio|audio oficial|\baudio\b|provided to youtube)", re.IGNORECASE)
+# Signals that this IS the official audio track.
+_GOOD_WORDS = re.compile(r"(official audio|\baudio\b|provided to youtube)", re.IGNORECASE)
 
 
 def _score_candidate(entry: dict, track: Track) -> float:
-    """Pontua um resultado do YouTube: quanto maior, melhor.
+    """Score a YouTube result: higher is better.
 
-    Sinais: proximidade da duração com a do Spotify (o mais forte — clipes
-    costumam ser mais longos por causa de intro/outro), canal '- Topic'
-    (áudio auto-gerado pela gravadora) e presença/ausência de palavras-chave.
+    Signals: how close the duration is to Spotify's (the strongest one — music
+    videos tend to be longer because of intros/outros), a '- Topic' channel
+    (label-provided auto-generated audio) and the presence/absence of keywords.
     """
     score = 0.0
     title = entry.get("title") or ""
     uploader = entry.get("uploader") or entry.get("channel") or ""
 
-    # 1) Duração — sinal mais confiável.
-    yt_dur = entry.get("duration")  # segundos
+    # 1) Duration — most reliable signal.
+    yt_dur = entry.get("duration")  # seconds
     if yt_dur and track.duration_ms:
         diff = abs(yt_dur - track.duration_ms / 1000)
         if diff <= 2:
@@ -72,25 +73,25 @@ def _score_candidate(entry: dict, track: Track) -> float:
         elif diff <= 10:
             score += 20
         else:
-            score -= diff  # quanto mais longe, pior (clipes com intro/outro)
+            score -= diff  # the further off, the worse (clips with intro/outro)
 
-    # 2) Canal de áudio oficial.
-    if uploader.endswith("- Topic") or uploader.endswith("- Tópico"):
+    # 2) Official audio channel.
+    if uploader.endswith("- Topic"):
         score += 50
-    # Canal do próprio artista (re-uploads de terceiros pontuam menos).
+    # The artist's own channel (third-party re-uploads score lower).
     first_artist = track.artist.split(",")[0].strip().lower()
     if first_artist and first_artist in uploader.lower():
         score += 35
     if _GOOD_WORDS.search(title):
         score += 15
 
-    # 3) Penaliza versões alternativas (a não ser que a própria faixa peça).
+    # 3) Penalize alternate versions (unless the track itself asks for it).
     spotify_title = track.title.lower()
     for m in _BAD_WORDS.finditer(title):
         if m.group(0).lower() not in spotify_title:
             score -= 40
 
-    # 4) Leve preferência por mais views (popularidade -> versão certa).
+    # 4) Slight preference for more views (popularity -> the right version).
     views = entry.get("view_count") or 0
     if views:
         score += min(views / 1_000_000, 10)
@@ -120,7 +121,7 @@ class Downloader:
         self.ffmpeg_dir = find_ffmpeg()
         if not self.ffmpeg_dir:
             raise RuntimeError(
-                "ffmpeg não encontrado. Rode setup_ffmpeg.py ou instale o ffmpeg no PATH."
+                "ffmpeg not found. Run setup_ffmpeg.py or install ffmpeg on your PATH."
             )
 
     def download_track(self, track: Track, progress: ProgressCb) -> DownloadResult:
@@ -128,7 +129,7 @@ class Downloader:
         target = self.out_dir / f"{filename}.mp3"
 
         if target.exists():
-            progress(100.0, "Já baixado")
+            progress(100.0, "Already downloaded")
             return DownloadResult(path=target, title=track.title, artist=track.artist)
 
         def hook(d: dict) -> None:
@@ -136,9 +137,9 @@ class Downloader:
                 total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                 done = d.get("downloaded_bytes") or 0
                 pct = (done / total * 90.0) if total else 0.0
-                progress(pct, "Baixando áudio…")
+                progress(pct, "Downloading audio…")
             elif d.get("status") == "finished":
-                progress(92.0, "Convertendo para MP3…")
+                progress(92.0, "Converting to MP3…")
 
         ydl_opts = {
             "format": "bestaudio/best",
@@ -158,10 +159,10 @@ class Downloader:
             "progress_hooks": [hook],
         }
 
-        progress(2.0, "Procurando a melhor versão no YouTube…")
+        progress(2.0, "Finding the best version on YouTube…")
         try:
-            # 1) Busca vários candidatos (sem baixar) e escolhe a faixa de áudio
-            #    certa pela duração + tipo de canal — evita pegar o videoclipe.
+            # 1) Search several candidates (without downloading) and pick the
+            #    right audio track by duration + channel type — avoids the video clip.
             with yt_dlp.YoutubeDL(
                 {"quiet": True, "no_warnings": True, "extract_flat": False, "skip_download": True}
             ) as probe:
@@ -171,30 +172,30 @@ class Downloader:
             entries = (search or {}).get("entries") or []
             best = _pick_best(entries, track)
 
-            progress(5.0, "Baixando áudio…")
+            progress(5.0, "Downloading audio…")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 if best:
                     ydl.process_ie_result(best, download=True)
                 else:
-                    # fallback: sem candidatos avaliáveis, baixa o 1º resultado
+                    # fallback: no scorable candidates, grab the first result
                     ydl.extract_info(f"ytsearch1:{track.search_query} audio", download=True)
         except yt_dlp.utils.DownloadError as exc:
-            raise RuntimeError(f"Falha ao baixar '{track.search_query}': {exc}") from exc
+            raise RuntimeError(f"Failed to download '{track.search_query}': {exc}") from exc
 
         if not target.exists():
-            # fallback: acha o mp3 recém-criado com esse prefixo
+            # fallback: find the freshly created mp3 with this prefix
             matches = list(self.out_dir.glob(f"{filename}.mp3"))
             if not matches:
-                raise RuntimeError(f"Conversão falhou para '{track.search_query}'.")
+                raise RuntimeError(f"Conversion failed for '{track.search_query}'.")
             target = matches[0]
 
-        progress(96.0, "Gravando tags e capa…")
+        progress(96.0, "Writing tags and cover…")
         self._tag(target, track)
-        progress(100.0, "Concluído")
+        progress(100.0, "Done")
         return DownloadResult(path=target, title=track.title, artist=track.artist)
 
     def _tag(self, mp3_path: Path, track: Track) -> None:
-        """Escreve tags ID3 e embute a capa do álbum."""
+        """Write ID3 tags and embed the album cover."""
         try:
             audio = MP3(mp3_path, ID3=ID3)
             if audio.tags is None:
@@ -220,8 +221,8 @@ class Downloader:
                             )
                         )
                 except requests.RequestException:
-                    pass  # capa é opcional
+                    pass  # cover is optional
 
             audio.save(v2_version=3)
         except id3_error:
-            pass  # tags são best-effort; o mp3 já está pronto
+            pass  # tags are best-effort; the mp3 is already ready

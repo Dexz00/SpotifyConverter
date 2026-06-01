@@ -1,3 +1,3 @@
-"""SpotifyConverter — converte links do Spotify em arquivos .mp3 com tags e capa."""
+"""SpotifyConverter — convert Spotify links into tagged .mp3 files."""
 
 __version__ = "1.0.0"

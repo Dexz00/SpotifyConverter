@@ -1,11 +1,11 @@
 """
-API FastAPI do SpotifyConverter.
+SpotifyConverter FastAPI app.
 
-Fluxo:
-  1. POST /api/jobs        { url, bitrate }  -> cria job, devolve faixas
-  2. GET  /api/jobs/{id}/events  (SSE)       -> progresso em tempo real
-  3. GET  /api/jobs/{id}/file/{index}        -> baixa um MP3
-  4. GET  /api/jobs/{id}/zip                 -> baixa tudo num .zip
+Flow:
+  1. POST /api/jobs        { url, bitrate }  -> create job, return tracks
+  2. GET  /api/jobs/{id}/events  (SSE)       -> real-time progress
+  3. GET  /api/jobs/{id}/file/{index}        -> download one MP3
+  4. GET  /api/jobs/{id}/zip                 -> download everything as a .zip
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 app = FastAPI(title="SpotifyConverter", version="1.0.0")
 
 
-# --------------------------------------------------------------------------- modelos
+# --------------------------------------------------------------------------- models
 
 
 class JobRequest(BaseModel):
@@ -94,7 +94,7 @@ def _run_job(job: Job) -> None:
 
     for i, (state, raw) in enumerate(zip(job.tracks, job._raw)):
         state.status = "working"
-        state.message = "Iniciando…"
+        state.message = "Starting…"
 
         def cb(pct: float, msg: str, _state=state) -> None:
             _state.progress = round(pct, 1)
@@ -104,16 +104,16 @@ def _run_job(job: Job) -> None:
             result = dl.download_track(raw, cb)
             state.status = "done"
             state.progress = 100.0
-            state.message = "Concluído"
+            state.message = "Done"
             state.filename = result.path.name
-        except Exception as exc:  # noqa: BLE001 — uma faixa que falha não derruba o resto
+        except Exception as exc:  # noqa: BLE001 — one failing track must not kill the rest
             state.status = "error"
             state.message = str(exc)[:300]
 
     job.status = "done"
 
 
-# --------------------------------------------------------------------------- rotas
+# --------------------------------------------------------------------------- routes
 
 
 @app.get("/api/health")
@@ -187,12 +187,12 @@ def _snapshot(job: Job) -> dict:
 async def job_events(job_id: str, request: Request) -> StreamingResponse:
     job = JOBS.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
+        raise HTTPException(status_code=404, detail="Job not found")
 
     async def stream():
         last = None
         while True:
-            # se o navegador fechou a aba/foi embora, encerra sem escrever no socket morto
+            # if the browser closed the tab / went away, stop without writing to a dead socket
             if await request.is_disconnected():
                 break
             snap = _snapshot(job)
@@ -215,13 +215,13 @@ async def job_events(job_id: str, request: Request) -> StreamingResponse:
 def get_file(job_id: str, index: int) -> FileResponse:
     job = JOBS.get(job_id)
     if not job or index < 0 or index >= len(job.tracks):
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+        raise HTTPException(status_code=404, detail="File not found")
     state = job.tracks[index]
     if state.status != "done" or not state.filename:
-        raise HTTPException(status_code=409, detail="Faixa ainda não está pronta")
+        raise HTTPException(status_code=409, detail="Track is not ready yet")
     path = DOWNLOAD_DIR / job.id / state.filename
     if not path.exists():
-        raise HTTPException(status_code=404, detail="Arquivo não existe mais")
+        raise HTTPException(status_code=404, detail="File no longer exists")
     return FileResponse(path, media_type="audio/mpeg", filename=state.filename)
 
 
@@ -229,10 +229,10 @@ def get_file(job_id: str, index: int) -> FileResponse:
 def get_zip(job_id: str) -> StreamingResponse:
     job = JOBS.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
+        raise HTTPException(status_code=404, detail="Job not found")
     done = [t for t in job.tracks if t.status == "done" and t.filename]
     if not done:
-        raise HTTPException(status_code=409, detail="Nenhuma faixa pronta ainda")
+        raise HTTPException(status_code=409, detail="No tracks ready yet")
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:

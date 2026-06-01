@@ -2,8 +2,8 @@
 
 # 🎵 SpotifyConverter
 
-**Converta links do Spotify (faixa, álbum ou playlist) em `.mp3`** — com qualidade
-até 320 kbps, capa do álbum e tags ID3, por uma interface web bonita e **sem cadastro**.
+**Convert Spotify links (track, album or playlist) into `.mp3`** — up to 320 kbps,
+with album cover and ID3 tags, through a clean web interface and **no sign-up**.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
@@ -12,52 +12,52 @@ até 320 kbps, capa do álbum e tags ID3, por uma interface web bonita e **sem c
 
 </div>
 
-> Inspirado em sites como o spotidownloader.com, mas com **qualidade configurável**,
-> **playlists/álbuns inteiros**, download em **`.zip`**, tags embutidas e — o pulo do
-> gato — **seleção inteligente da versão de áudio certa** (nada de pegar o videoclipe).
+> Inspired by sites like spotidownloader.com, but with **configurable quality**,
+> **full playlists/albums**, **`.zip`** downloads, embedded tags and — the key
+> trick — **smart selection of the right audio version** (no grabbing the music video).
 
 ---
 
-## ✨ Recursos
+## ✨ Features
 
-- 🔗 Faixa, **álbum** ou **playlist** — cola o link e pronto
-- 🎚️ Qualidade selecionável: **128 / 192 / 256 / 320 kbps**
-- 🖼️ **Capa do álbum + tags ID3** (título, artista, álbum) embutidas no MP3
-- 🧠 **Escolhe a faixa de áudio certa** no YouTube por duração + tipo de canal
-  (evita videoclipe, versão ao vivo, remix, loops…)
-- 📦 Botão **"Baixar tudo (.zip)"** para coleções
-- 📡 Progresso em **tempo real** (Server-Sent Events)
-- 🔌 Funciona **sem cadastro**; opcionalmente usa a **API oficial do Spotify**
-  para playlists/álbuns completos e metadados mais ricos
+- 🔗 Track, **album** or **playlist** — paste the link and go
+- 🎚️ Selectable quality: **128 / 192 / 256 / 320 kbps**
+- 🖼️ **Album cover + ID3 tags** (title, artist, album) embedded in the MP3
+- 🧠 **Picks the right audio track** on YouTube by duration + channel type
+  (avoids music videos, live versions, remixes, loops…)
+- 📦 **"Download all (.zip)"** button for collections
+- 📡 **Real-time** progress (Server-Sent Events)
+- 🔌 Works **without sign-up**; optionally uses the **official Spotify API**
+  for full playlists/albums and richer metadata
 
 ---
 
-## ⚙️ Como funciona
+## ⚙️ How it works
 
-O Spotify entrega o áudio com **DRM**, então nenhuma ferramenta baixa o arquivo
-"de dentro" do Spotify. O fluxo (o mesmo de todos esses sites) é:
+Spotify serves audio with **DRM**, so no tool downloads the file "from inside"
+Spotify. The flow (the same one every such site uses) is:
 
 ```
-         ┌─ metadados (nome, artista, álbum, capa) ──► do SPOTIFY
+         ┌─ metadata (name, artist, album, cover) ──► from SPOTIFY
 Link  ───┤
-         └─ áudio (o .mp3 em si) ───────────────────► do YOUTUBE (yt-dlp)
-                                                         └─ convertido p/ MP3 + tags (ffmpeg + mutagen)
+         └─ audio (the .mp3 itself) ────────────────► from YOUTUBE (yt-dlp)
+                                                         └─ converted to MP3 + tags (ffmpeg + mutagen)
 ```
 
-A diferença deste projeto: em vez de pegar o primeiro resultado do YouTube (que
-costuma ser o videoclipe), ele **busca vários candidatos e escolhe o melhor**
-comparando a duração com a do Spotify e priorizando canais de áudio oficiais.
+What makes this project different: instead of grabbing the first YouTube result
+(usually the music video), it **searches several candidates and picks the best**
+by comparing duration against Spotify's and preferring official audio channels.
 
 ---
 
-## 🚀 Começando
+## 🚀 Getting started
 
-### Windows (mais fácil)
+### Windows (easiest)
 
-Dê dois cliques em **`run.bat`**. Ele cria o ambiente, instala as dependências,
-baixa o `ffmpeg` e abre o navegador.
+Double-click **`run.bat`**. It creates the environment, installs dependencies,
+downloads `ffmpeg` and opens your browser.
 
-### Manual (qualquer SO)
+### Manual (any OS)
 
 ```bash
 git clone https://github.com/Dexz00/SpotifyConverter.git
@@ -68,74 +68,75 @@ python -m venv .venv
 # Linux/Mac: source .venv/bin/activate
 
 pip install -r requirements.txt
-python setup_ffmpeg.py        # baixa o ffmpeg p/ ./bin (Windows); no Linux/Mac use o gerenciador de pacotes
+python setup_ffmpeg.py        # downloads ffmpeg into ./bin (Windows); on Linux/Mac use your package manager
 python run.py
 ```
 
-Abra **http://127.0.0.1:8000**, cole o link e clique em **Converter**.
-Os arquivos ficam em `downloads/<id-do-job>/`.
+Open **http://127.0.0.1:8000**, paste the link and click **Convert**.
+Files land in `downloads/<job-id>/`.
 
 ---
 
-## 🔑 (Opcional) API oficial do Spotify
+## 🔑 (Optional) Official Spotify API
 
-Funciona sem nada disso. Mas com credenciais você ganha **playlists/álbuns
-inteiros** (paginados) e metadados mais ricos. Um selinho na home mostra o modo ativo.
+It works without any of this. But with credentials you get **full
+playlists/albums** (paginated) and richer metadata. A badge on the home page
+shows which mode is active.
 
-1. Em https://developer.spotify.com/dashboard, **Create app** (Redirect URI pode ser `http://127.0.0.1:8000`)
-2. Copie o **Client ID** e o **Client Secret** em *Settings*
-3. Copie `.env.example` para `.env` e preencha:
+1. At https://developer.spotify.com/dashboard, **Create app** (Redirect URI can be `http://127.0.0.1:8000`)
+2. Copy the **Client ID** and **Client Secret** under *Settings*
+3. Copy `.env.example` to `.env` and fill it in:
 
    ```env
-   SPOTIFY_CLIENT_ID=seu_client_id
-   SPOTIFY_CLIENT_SECRET=seu_client_secret
+   SPOTIFY_CLIENT_ID=your_client_id
+   SPOTIFY_CLIENT_SECRET=your_client_secret
    ```
 
-4. Rode de novo. Se as credenciais falharem, ele volta sozinho ao modo sem cadastro.
+4. Run again. If the credentials fail, it falls back to no-signup mode automatically.
 
-> ⚠️ O `.env` está no `.gitignore` — suas credenciais **nunca** vão pro GitHub.
+> ⚠️ `.env` is in `.gitignore` — your credentials **never** reach GitHub.
 
 ---
 
-## 🗂️ Estrutura
+## 🗂️ Structure
 
 ```
 SpotifyConverter/
 ├── app/
-│   ├── spotify.py       # metadados sem API (página de embed)
-│   ├── spotify_api.py   # metadados via API oficial (opcional)
-│   ├── resolver.py      # escolhe a melhor fonte de metadados
-│   ├── downloader.py    # busca + seleção + yt-dlp + ffmpeg + tags/capa
-│   └── main.py          # API FastAPI + progresso SSE + serve o frontend
-├── web/                 # frontend (HTML / CSS / JS puro, sem build)
-├── setup_ffmpeg.py      # baixa o ffmpeg automaticamente
-├── run.py               # entrypoint do servidor
-├── run.bat              # launcher 1-clique (Windows)
+│   ├── spotify.py       # metadata without API (embed page)
+│   ├── spotify_api.py   # metadata via official API (optional)
+│   ├── resolver.py      # chooses the best metadata source
+│   ├── downloader.py    # search + selection + yt-dlp + ffmpeg + tags/cover
+│   └── main.py          # FastAPI API + SSE progress + serves the frontend
+├── web/                 # frontend (plain HTML / CSS / JS, no build step)
+├── setup_ffmpeg.py      # downloads ffmpeg automatically
+├── run.py               # server entry point
+├── run.bat              # 1-click launcher (Windows)
 └── requirements.txt
 ```
 
 ---
 
-## 🛠️ Usando como base (pro próximo dev)
+## 🛠️ Using it as a base (for the next dev)
 
-- **Trocar a fonte de áudio?** Mexa só em `app/downloader.py` — `_pick_best`/
-  `_score_candidate` decidem qual resultado baixar; `download_track` faz o resto.
-- **Outro formato (m4a, flac, opus)?** Ajuste o `FFmpegExtractAudio` em `download_track`.
-- **Novos metadados?** `app/resolver.py` é o ponto único; ele cai do oficial pro embed.
-- **Frontend** é HTML/CSS/JS puro em `web/` — sem build, sem framework, fácil de editar.
+- **Change the audio source?** Touch only `app/downloader.py` — `_pick_best`/
+  `_score_candidate` decide which result to download; `download_track` does the rest.
+- **Another format (m4a, flac, opus)?** Adjust `FFmpegExtractAudio` in `download_track`.
+- **New metadata?** `app/resolver.py` is the single entry point; it falls back from official to embed.
+- The **frontend** is plain HTML/CSS/JS in `web/` — no build, no framework, easy to edit.
 
-PRs e forks são bem-vindos. 🙂
-
----
-
-## ⚖️ Aviso legal
-
-Ferramenta para **uso pessoal e educativo**. Baixar conteúdo protegido por
-direitos autorais pode violar os termos do Spotify/YouTube e a lei do seu país.
-Use apenas com material que você tem o direito de baixar.
+PRs and forks welcome. 🙂
 
 ---
 
-## 📄 Licença
+## ⚖️ Disclaimer
+
+A tool for **personal and educational use**. Downloading copyrighted content may
+violate Spotify's/YouTube's terms and the law in your country. Only use it with
+material you have the right to download.
+
+---
+
+## 📄 License
 
 [MIT](LICENSE) © [Dexz00](https://github.com/Dexz00)

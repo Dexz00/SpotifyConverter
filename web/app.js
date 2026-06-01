@@ -15,14 +15,14 @@ const ffmpegWarn = document.getElementById("ffmpeg-warn");
 let currentJob = null;
 let eventSource = null;
 
-// Checa ffmpeg e fonte de metadados ao carregar
+// Check ffmpeg and metadata source on load
 fetch("/api/health")
   .then((r) => r.json())
   .then((d) => {
     if (!d.ffmpeg) ffmpegWarn.hidden = false;
     const badge = document.getElementById("source-badge");
     if (badge) {
-      badge.textContent = d.source === "api" ? "API oficial do Spotify" : "modo sem cadastro";
+      badge.textContent = d.source === "api" ? "official Spotify API" : "no-signup mode";
       badge.classList.toggle("on", d.source === "api");
     }
   })
@@ -30,7 +30,7 @@ fetch("/api/health")
 
 function setBusy(busy) {
   goBtn.disabled = busy;
-  goText.textContent = busy ? "Lendo…" : "Converter";
+  goText.textContent = busy ? "Reading…" : "Convert";
   goSpin.hidden = !busy;
 }
 
@@ -49,7 +49,7 @@ function escapeHtml(s) {
   ));
 }
 
-// Dispara um download sem navegar a página (não derruba a conexão SSE).
+// Trigger a download without navigating the page (keeps the SSE connection alive).
 function triggerDownload(url) {
   const a = document.createElement("a");
   a.href = url;
@@ -75,7 +75,7 @@ form.addEventListener("submit", async (e) => {
       body: JSON.stringify({ url, bitrate: bitrateSel.value }),
     });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || "Falha ao processar o link.");
+    if (!resp.ok) throw new Error(data.detail || "Failed to process the link.");
     currentJob = data;
     renderCollection(data);
     listenProgress(data.id);
@@ -89,10 +89,10 @@ form.addEventListener("submit", async (e) => {
 function renderCollection(job) {
   document.getElementById("col-cover").src = job.cover_url || "";
   document.getElementById("col-kind").textContent =
-    { track: "Faixa", album: "Álbum", playlist: "Playlist" }[job.kind] || job.kind;
+    { track: "Track", album: "Album", playlist: "Playlist" }[job.kind] || job.kind;
   document.getElementById("col-name").textContent = job.name;
   document.getElementById("col-count").textContent =
-    job.tracks.length === 1 ? "1 faixa" : `${job.tracks.length} faixas`;
+    job.tracks.length === 1 ? "1 track" : `${job.tracks.length} tracks`;
 
   zipBtn.hidden = job.tracks.length < 2;
   zipBtn.onclick = () => triggerDownload(`/api/jobs/${job.id}/zip`);
@@ -107,7 +107,7 @@ function renderCollection(job) {
       <div class="t-info">
         <div class="t-title">${escapeHtml(t.title)}</div>
         <div class="t-artist">${escapeHtml(t.artist)}</div>
-        <div class="t-status" id="status-${i}">Na fila…</div>
+        <div class="t-status" id="status-${i}">Queued…</div>
       </div>
       <div class="t-dur">${escapeHtml(t.duration)}</div>
       <div class="t-action" id="action-${i}"><span class="mini-spin"></span></div>
@@ -143,19 +143,19 @@ function updateTrack(jobId, i, t) {
   statusEl.classList.toggle("err", t.status === "error");
 
   if (t.status === "done") {
-    statusEl.textContent = "✓ Pronto";
+    statusEl.textContent = "✓ Ready";
     barEl.style.width = "100%";
-    actionEl.innerHTML = `<button class="dl-btn" title="Baixar MP3">⬇</button>`;
+    actionEl.innerHTML = `<button class="dl-btn" title="Download MP3">⬇</button>`;
     actionEl.querySelector("button").onclick = () =>
       triggerDownload(`/api/jobs/${jobId}/file/${i}`);
   } else if (t.status === "error") {
-    statusEl.textContent = "Erro: " + (t.message || "falhou");
+    statusEl.textContent = "Error: " + (t.message || "failed");
     barEl.style.width = "0";
     actionEl.innerHTML = `<span title="${escapeHtml(t.message)}">⚠️</span>`;
   } else if (t.status === "working") {
-    statusEl.textContent = t.message || "Trabalhando…";
+    statusEl.textContent = t.message || "Working…";
     barEl.style.width = t.progress + "%";
   } else {
-    statusEl.textContent = "Na fila…";
+    statusEl.textContent = "Queued…";
   }
 }

@@ -1,13 +1,13 @@
 """
-Extração de metadados do Spotify SEM precisar de credenciais.
+Fetch Spotify metadata WITHOUT requiring API credentials.
 
-Estratégia (a mesma usada por sites tipo spotidownloader): a página de
-"embed" do Spotify (open.spotify.com/embed/...) traz um blob JSON
-(`__NEXT_DATA__`) com todos os metadados da faixa / álbum / playlist:
-nome, artista, duração, capa e — no caso de coleções — a lista de faixas.
+Strategy (the same one used by sites like spotidownloader): the Spotify
+"embed" page (open.spotify.com/embed/...) ships a JSON blob (`__NEXT_DATA__`)
+with all the metadata for a track / album / playlist: name, artist, duration,
+cover art and — for collections — the track list.
 
-Nada de DRM é tocado aqui: só lemos informação pública. O áudio em si é
-obtido depois a partir do YouTube (ver downloader.py).
+No DRM is touched here: we only read public information. The audio itself is
+later obtained from YouTube (see downloader.py).
 """
 from __future__ import annotations
 
@@ -40,12 +40,12 @@ _HEADERS = {
 
 
 class SpotifyError(Exception):
-    """Erro ao ler metadados do Spotify."""
+    """Raised when reading Spotify metadata fails."""
 
 
 @dataclass
 class Track:
-    """Uma faixa a ser baixada."""
+    """A single track to download."""
 
     title: str
     artist: str
@@ -56,7 +56,7 @@ class Track:
 
     @property
     def search_query(self) -> str:
-        """Consulta usada para achar a faixa no YouTube."""
+        """Query used to find the track on YouTube."""
         return f"{self.artist} - {self.title}".strip(" -")
 
     @property
@@ -69,7 +69,7 @@ class Track:
 
 @dataclass
 class Collection:
-    """Resultado da leitura de um link: 1+ faixas com um título de contexto."""
+    """Result of reading a link: one or more tracks with a context title."""
 
     kind: str  # track | album | playlist
     name: str
@@ -81,43 +81,43 @@ class Collection:
 
 
 def parse_url(url: str) -> tuple[str, str]:
-    """Extrai (kind, id) de uma URL/URI do Spotify."""
+    """Extract (kind, id) from a Spotify URL/URI."""
     m = _URL_RE.search(url.strip())
     if not m:
-        raise SpotifyError("Link do Spotify inválido. Cole um link de faixa, álbum ou playlist.")
+        raise SpotifyError("Invalid Spotify link. Paste a track, album or playlist link.")
     return m.group(1).lower(), m.group(2)
 
 
 def _fetch_embed_json(kind: str, sid: str) -> dict:
-    """Baixa a página de embed e devolve o JSON do __NEXT_DATA__."""
+    """Download the embed page and return the __NEXT_DATA__ JSON."""
     url = f"https://open.spotify.com/embed/{kind}/{sid}"
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=20)
         resp.raise_for_status()
-    except requests.RequestException as exc:  # rede / 404
-        raise SpotifyError(f"Não consegui acessar o Spotify: {exc}") from exc
+    except requests.RequestException as exc:  # network / 404
+        raise SpotifyError(f"Could not reach Spotify: {exc}") from exc
 
     m = _NEXT_DATA_RE.search(resp.text)
     if not m:
-        raise SpotifyError("Não achei os metadados na página do Spotify (conteúdo pode ser privado).")
+        raise SpotifyError("Could not find metadata on the Spotify page (content may be private).")
     try:
         return json.loads(m.group(1))
     except json.JSONDecodeError as exc:
-        raise SpotifyError("Metadados do Spotify ilegíveis.") from exc
+        raise SpotifyError("Unreadable Spotify metadata.") from exc
 
 
 def _entity(next_data: dict) -> dict:
     try:
         return next_data["props"]["pageProps"]["state"]["data"]["entity"]
     except (KeyError, TypeError) as exc:
-        raise SpotifyError("Estrutura de metadados inesperada do Spotify.") from exc
+        raise SpotifyError("Unexpected Spotify metadata structure.") from exc
 
 
 def _cover_from(obj: dict) -> str:
-    """Extrai a melhor URL de capa de um entity/item de embed.
+    """Extract the best cover URL from an embed entity/item.
 
-    O Spotify usa dois formatos: `coverArt.sources` (antigo) e
-    `visualIdentity.image` (atual). Cobrimos ambos.
+    Spotify uses two shapes: `coverArt.sources` (legacy) and
+    `visualIdentity.image` (current). We handle both.
     """
     if not isinstance(obj, dict):
         return ""
@@ -139,12 +139,12 @@ def _artists_from(entity: dict) -> str:
     names = [a.get("name", "") for a in artists if a.get("name")]
     if names:
         return ", ".join(names)
-    # fallback: subtitle costuma trazer o artista
+    # fallback: subtitle usually holds the artist
     return entity.get("subtitle", "") or ""
 
 
 def get_collection(url: str) -> Collection:
-    """Lê um link do Spotify e devolve a coleção de faixas a baixar."""
+    """Read a Spotify link and return the collection of tracks to download."""
     kind, sid = parse_url(url)
     entity = _entity(_fetch_embed_json(kind, sid))
 
@@ -153,7 +153,7 @@ def get_collection(url: str) -> Collection:
 
     if kind == "track":
         track = Track(
-            title=entity.get("name") or entity.get("title") or "Faixa",
+            title=entity.get("name") or entity.get("title") or "Track",
             artist=_artists_from(entity),
             album=(entity.get("album") or {}).get("name", "") if isinstance(entity.get("album"), dict) else "",
             cover_url=ctx_cover,
@@ -162,10 +162,10 @@ def get_collection(url: str) -> Collection:
         )
         return Collection(kind="track", name=track.title, cover_url=ctx_cover, tracks=[track])
 
-    # álbum ou playlist -> trackList
+    # album or playlist -> trackList
     track_list = entity.get("trackList") or []
     if not track_list:
-        raise SpotifyError("Coleção vazia ou privada — não há faixas para baixar.")
+        raise SpotifyError("Empty or private collection — no tracks to download.")
 
     tracks: list[Track] = []
     for item in track_list:
@@ -173,7 +173,7 @@ def get_collection(url: str) -> Collection:
         tid = uri.split(":")[-1] if uri else ""
         tracks.append(
             Track(
-                title=item.get("title") or "Faixa",
+                title=item.get("title") or "Track",
                 artist=item.get("subtitle") or "",
                 album=ctx_name if kind == "album" else "",
                 cover_url=_cover_from(item) or ctx_cover,

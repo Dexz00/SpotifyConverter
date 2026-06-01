@@ -1,15 +1,15 @@
 """
-Cliente OPCIONAL da Web API oficial do Spotify (Client Credentials).
+OPTIONAL client for the official Spotify Web API (Client Credentials).
 
-Quando o usuário fornece SPOTIFY_CLIENT_ID e SPOTIFY_CLIENT_SECRET, usamos
-a API oficial — que pagina playlists/álbuns inteiros e traz metadados mais
-ricos (capa por faixa, álbum correto, número da faixa). Sem credenciais, o
-projeto cai no scraping da página de embed (ver spotify.py).
+When the user provides SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET, we use the
+official API — which paginates full playlists/albums and returns richer
+metadata (per-track cover, correct album, track number). Without credentials,
+the project falls back to scraping the embed page (see spotify.py).
 
-Como obter credenciais (grátis):
+How to get credentials (free):
   1. https://developer.spotify.com/dashboard  ->  Create app
-  2. Copie o Client ID e o Client Secret
-  3. Coloque no arquivo .env (veja .env.example)
+  2. Copy the Client ID and Client Secret
+  3. Put them in the .env file (see .env.example)
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ _API = "https://api.spotify.com/v1"
 
 
 def credentials() -> Optional[tuple[str, str]]:
-    """Devolve (client_id, client_secret) se ambos estiverem no ambiente."""
+    """Return (client_id, client_secret) if both are set in the environment."""
     cid = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
     secret = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
     if cid and secret:
@@ -36,7 +36,7 @@ def credentials() -> Optional[tuple[str, str]]:
 
 
 class SpotifyAPI:
-    """Cliente mínimo de leitura usando o fluxo Client Credentials."""
+    """Minimal read-only client using the Client Credentials flow."""
 
     def __init__(self, client_id: str, client_secret: str):
         self._id = client_id
@@ -57,7 +57,7 @@ class SpotifyAPI:
         )
         if resp.status_code != 200:
             raise SpotifyError(
-                "Credenciais do Spotify inválidas (confira CLIENT_ID/SECRET no .env)."
+                "Invalid Spotify credentials (check CLIENT_ID/SECRET in .env)."
             )
         data = resp.json()
         self._token = data["access_token"]
@@ -73,9 +73,9 @@ class SpotifyAPI:
             timeout=20,
         )
         if resp.status_code == 404:
-            raise SpotifyError("Conteúdo não encontrado (link errado ou privado).")
+            raise SpotifyError("Content not found (wrong link or private).")
         if resp.status_code != 200:
-            raise SpotifyError(f"Erro da API do Spotify ({resp.status_code}).")
+            raise SpotifyError(f"Spotify API error ({resp.status_code}).")
         return resp.json()
 
     # --------------------------------------------------------------- helpers
@@ -93,7 +93,7 @@ class SpotifyAPI:
     def _track_from(self, t: dict, album: Optional[dict] = None) -> Track:
         album = album or t.get("album") or {}
         return Track(
-            title=t.get("name", "Faixa"),
+            title=t.get("name", "Track"),
             artist=self._artists(t),
             album=album.get("name", ""),
             cover_url=self._cover(album.get("images", [])),
@@ -101,7 +101,7 @@ class SpotifyAPI:
             spotify_id=t.get("id", ""),
         )
 
-    # ----------------------------------------------------------- coleções
+    # ----------------------------------------------------------- collections
     def get_collection(self, url: str) -> Collection:
         kind, sid = parse_url(url)
 
@@ -124,7 +124,7 @@ class SpotifyAPI:
                 if not nxt:
                     break
                 page = self._get(nxt.replace(_API, ""))
-            return Collection("album", album.get("name", "Álbum"), cover, tracks)
+            return Collection("album", album.get("name", "Album"), cover, tracks)
 
         # playlist
         pl = self._get(f"/playlists/{sid}")

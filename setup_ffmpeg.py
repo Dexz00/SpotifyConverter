@@ -1,6 +1,6 @@
 """
-Baixa um build estático do ffmpeg para ./bin (Windows) caso ele não exista
-no PATH. Roda uma vez; depois o SpotifyConverter o encontra automaticamente.
+Download a static ffmpeg build into ./bin (Windows) when it is not already on
+the PATH. Run it once; afterwards SpotifyConverter finds it automatically.
 """
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-mas
 
 def already_have() -> bool:
     if shutil.which("ffmpeg"):
-        print("[OK] ffmpeg ja esta no PATH.")
+        print("[OK] ffmpeg is already on the PATH.")
         return True
     if (BIN / "ffmpeg.exe").exists():
-        print(f"[OK] ffmpeg ja esta em {BIN}.")
+        print(f"[OK] ffmpeg is already in {BIN}.")
         return True
     return False
 
@@ -30,17 +30,17 @@ def main() -> int:
     if already_have():
         return 0
     if os.name != "nt":
-        print("Sistema não-Windows: instale o ffmpeg pelo gerenciador de pacotes "
-              "(ex.: 'sudo apt install ffmpeg' ou 'brew install ffmpeg').")
+        print("Non-Windows system: install ffmpeg with your package manager "
+              "(e.g. 'sudo apt install ffmpeg' or 'brew install ffmpeg').")
         return 1
 
     BIN.mkdir(exist_ok=True)
-    print("Baixando ffmpeg (~30 MB)… isso pode levar um minuto.")
+    print("Downloading ffmpeg (~30 MB)… this may take a minute.")
     req = Request(URL, headers={"User-Agent": "SpotifyConverter"})
-    with urlopen(req) as resp:  # noqa: S310 — URL fixa e confiável
+    with urlopen(req) as resp:  # noqa: S310 — fixed, trusted URL
         data = resp.read()
 
-    print("Extraindo…")
+    print("Extracting…")
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         for member in zf.namelist():
             name = os.path.basename(member)
@@ -49,9 +49,9 @@ def main() -> int:
                     shutil.copyfileobj(src, dst)
 
     if (BIN / "ffmpeg.exe").exists():
-        print(f"[OK] ffmpeg instalado em {BIN}")
+        print(f"[OK] ffmpeg installed in {BIN}")
         return 0
-    print("[ERRO] Nao consegui extrair o ffmpeg do pacote.")
+    print("[ERROR] Could not extract ffmpeg from the package.")
     return 1
 
 
