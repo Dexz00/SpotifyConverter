@@ -95,7 +95,12 @@ function renderCollection(job) {
     job.tracks.length === 1 ? "1 track" : `${job.tracks.length} tracks`;
 
   zipBtn.hidden = job.tracks.length < 2;
-  zipBtn.onclick = () => triggerDownload(`/api/jobs/${job.id}/zip`);
+  zipBtn.onclick = () => {
+    triggerDownload(`/api/jobs/${job.id}/zip`);
+    job.tracks.forEach((_, i) => markDownloaded(i));
+    zipBtn.disabled = true;
+    zipBtn.textContent = "✓ Downloaded";
+  };
 
   tracksEl.innerHTML = "";
   job.tracks.forEach((t, i) => {
@@ -134,6 +139,17 @@ function listenProgress(jobId) {
   };
 }
 
+// Files are deleted from the server right after download, so reflect that in the UI.
+function markDownloaded(i) {
+  const statusEl = document.getElementById(`status-${i}`);
+  const actionEl = document.getElementById(`action-${i}`);
+  if (!statusEl || !actionEl) return;
+  if (statusEl.dataset.done === "1") return; // avoid double-marking (e.g. zip + click)
+  statusEl.dataset.done = "1";
+  statusEl.textContent = "✓ Downloaded";
+  actionEl.innerHTML = `<span title="Saved to your computer">✓</span>`;
+}
+
 function updateTrack(jobId, i, t) {
   const statusEl = document.getElementById(`status-${i}`);
   const barEl = document.getElementById(`bar-${i}`);
@@ -145,9 +161,11 @@ function updateTrack(jobId, i, t) {
   if (t.status === "done") {
     statusEl.textContent = "✓ Ready";
     barEl.style.width = "100%";
-    actionEl.innerHTML = `<button class="dl-btn" title="Download MP3">⬇</button>`;
-    actionEl.querySelector("button").onclick = () =>
+    actionEl.innerHTML = `<button class="dl-btn" title="Download MP3 (removed from server afterwards)">⬇</button>`;
+    actionEl.querySelector("button").onclick = () => {
       triggerDownload(`/api/jobs/${jobId}/file/${i}`);
+      markDownloaded(i);
+    };
   } else if (t.status === "error") {
     statusEl.textContent = "Error: " + (t.message || "failed");
     barEl.style.width = "0";

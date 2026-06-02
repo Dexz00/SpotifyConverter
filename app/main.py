@@ -26,6 +26,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from dotenv import load_dotenv
 
@@ -68,6 +69,7 @@ class TrackState:
     progress: float = 0.0
     message: str = ""
     filename: str = ""
+    removed: bool = False  # True once the file has been downloaded and deleted
 
 
 @dataclass
@@ -99,6 +101,27 @@ def _schedule_cleanup(job_id: str) -> None:
     timer = threading.Timer(JOB_TTL_SECONDS, _cleanup_job, args=(job_id,))
     timer.daemon = True
     timer.start()
+
+
+def _delete_one_file(job_id: str, index: int) -> None:
+    """Delete a single track right after it has been downloaded (runs post-send)."""
+    job = JOBS.get(job_id)
+    if not job or index >= len(job.tracks):
+        return
+    state = job.tracks[index]
+    fn, state.filename = state.filename, ""
+    state.removed = True
+    state.message = "Downloaded (removed from server)"
+    if fn:
+        (DOWNLOAD_DIR / job_id / fn).unlink(missing_ok=True)
+    # remove the now-empty folder, but keep the job record so a re-download still
+    # returns a clear "already downloaded" (410); the TTL timer drops it later.
+    folder = DOWNLOAD_DIR / job_id
+    try:
+        if folder.exists() and not any(folder.iterdir()):
+            folder.rmdir()
+    except OSError:
+        pass
 
 
 # --------------------------------------------------------------------------- worker
@@ -243,12 +266,20 @@ def get_file(job_id: str, index: int) -> FileResponse:
     if not job or index < 0 or index >= len(job.tracks):
         raise HTTPException(status_code=404, detail="File not found")
     state = job.tracks[index]
+    if state.removed:
+        raise HTTPException(status_code=410, detail="Already downloaded — the file was removed from the server.")
     if state.status != "done" or not state.filename:
         raise HTTPException(status_code=409, detail="Track is not ready yet")
     path = DOWNLOAD_DIR / job.id / state.filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="File no longer exists")
-    return FileResponse(path, media_type="audio/mpeg", filename=state.filename)
+    # delete the file once it has finished being sent to the client
+    return FileResponse(
+        path,
+        media_type="audio/mpeg",
+        filename=state.filename,
+        background=BackgroundTask(_delete_one_file, job.id, index),
+    )
 
 
 @app.get("/api/jobs/{job_id}/zip")
@@ -270,7 +301,13 @@ def get_zip(job_id: str) -> StreamingResponse:
 
     safe = "".join(c for c in job.name if c.isalnum() or c in " -_").strip() or "spotify"
     headers = {"Content-Disposition": f'attachment; filename="{safe}.zip"'}
-    return StreamingResponse(buf, media_type="application/zip", headers=headers)
+    # the zip lives entirely in memory now, so we can wipe the job from disk
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers=headers,
+        background=BackgroundTask(_cleanup_job, job_id),
+    )
 
 
 # --------------------------------------------------------------------------- frontend
