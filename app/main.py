@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -34,9 +36,16 @@ from .spotify import SpotifyError, Track
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DOWNLOAD_DIR = BASE_DIR / "downloads"
 WEB_DIR = BASE_DIR / "web"
-DOWNLOAD_DIR.mkdir(exist_ok=True)
+
+# Files are NOT kept in the project. We work in a temporary system folder and
+# auto-delete each job shortly after it finishes — nothing is stored long-term.
+DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "spotifyconverter"
+shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)  # wipe leftovers from previous runs
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# How long a finished job's files stay available for download before deletion.
+JOB_TTL_SECONDS = 900  # 15 minutes
 
 app = FastAPI(title="SpotifyConverter", version="1.0.0")
 
@@ -77,6 +86,21 @@ class Job:
 JOBS: dict[str, Job] = {}
 
 
+# --------------------------------------------------------------------------- cleanup
+
+
+def _cleanup_job(job_id: str) -> None:
+    """Forget the job and delete its temporary files from disk."""
+    JOBS.pop(job_id, None)
+    shutil.rmtree(DOWNLOAD_DIR / job_id, ignore_errors=True)
+
+
+def _schedule_cleanup(job_id: str) -> None:
+    timer = threading.Timer(JOB_TTL_SECONDS, _cleanup_job, args=(job_id,))
+    timer.daemon = True
+    timer.start()
+
+
 # --------------------------------------------------------------------------- worker
 
 
@@ -90,6 +114,7 @@ def _run_job(job: Job) -> None:
         for ts in job.tracks:
             ts.status = "error"
             ts.message = str(exc)
+        _schedule_cleanup(job.id)
         return
 
     for i, (state, raw) in enumerate(zip(job.tracks, job._raw)):
@@ -111,6 +136,7 @@ def _run_job(job: Job) -> None:
             state.message = str(exc)[:300]
 
     job.status = "done"
+    _schedule_cleanup(job.id)  # files self-delete after JOB_TTL_SECONDS
 
 
 # --------------------------------------------------------------------------- routes

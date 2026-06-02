@@ -73,7 +73,10 @@ python run.py
 ```
 
 Open **http://127.0.0.1:8000**, paste the link and click **Convert**.
-Files land in `downloads/<job-id>/`.
+
+> Downloaded files are **not stored** in the project. They are converted in a
+> temporary system folder and **auto-deleted ~15 minutes** after the job
+> finishes (configurable via `JOB_TTL_SECONDS` in `app/main.py`).
 
 ---
 
