@@ -10,6 +10,10 @@ with album cover and ID3 tags, through a clean web interface and **no sign-up**.
 ![yt-dlp](https://img.shields.io/badge/yt--dlp-FF0000?logo=youtube&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+<br>
+
+![SpotifyConverter screenshot](docs/screenshot.png)
+
 </div>
 
 > Inspired by sites like spotidownloader.com, but with **configurable quality**,
@@ -78,6 +82,24 @@ Open **http://127.0.0.1:8000**, paste the link and click **Convert**.
 > temporary system folder and **auto-deleted ~15 minutes** after the job
 > finishes (configurable via `JOB_TTL_SECONDS` in `app/main.py`).
 
+### Docker (one command, ffmpeg included)
+
+```bash
+docker build -t spotifyconverter .
+docker run --rm -p 8000:8000 spotifyconverter
+```
+
+With the optional Spotify API credentials:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e SPOTIFY_CLIENT_ID=your_client_id \
+  -e SPOTIFY_CLIENT_SECRET=your_client_secret \
+  spotifyconverter
+```
+
+Then open **http://127.0.0.1:8000**.
+
 ---
 
 ## 🔑 (Optional) Official Spotify API
@@ -115,6 +137,7 @@ SpotifyConverter/
 ├── setup_ffmpeg.py      # downloads ffmpeg automatically
 ├── run.py               # server entry point
 ├── run.bat              # 1-click launcher (Windows)
+├── Dockerfile           # container image (ffmpeg bundled)
 └── requirements.txt
 ```
 
