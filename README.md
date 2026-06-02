@@ -24,14 +24,14 @@ with album cover and ID3 tags, through a clean web interface and **no sign-up**.
 
 ## ✨ Features
 
-- 🔗 Track, **album** or **playlist** — paste the link and go
-- 🎚️ Selectable quality: **128 / 192 / 256 / 320 kbps**
-- 🖼️ **Album cover + ID3 tags** (title, artist, album) embedded in the MP3
-- 🧠 **Picks the right audio track** on YouTube by duration + channel type
+- Track, **album** or **playlist** — paste the link and go
+- Selectable quality: **128 / 192 / 256 / 320 kbps**
+- **Album cover + ID3 tags** (title, artist, album) embedded in the MP3
+- **Picks the right audio track** on YouTube by duration + channel type
   (avoids music videos, live versions, remixes, loops…)
-- 📦 **"Download all (.zip)"** button for collections
-- 📡 **Real-time** progress (Server-Sent Events)
-- 🔌 Works **without sign-up**; optionally uses the **official Spotify API**
+- **"Download all (.zip)"** button for collections
+- **Real-time** progress (Server-Sent Events)
+- Works **without sign-up**; optionally uses the **official Spotify API**
   for full playlists/albums and richer metadata
 
 ---
