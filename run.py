@@ -19,7 +19,9 @@ if sys.platform == "win32":
 
 
 if __name__ == "__main__":
-    # HOST/PORT are overridable via env (Docker sets HOST=0.0.0.0).
-    host = os.getenv("HOST", "127.0.0.1")
+    # HOST/PORT are overridable via env (Docker/Railway sets HOST=0.0.0.0).
+    # Default to 0.0.0.0 for better compatibility with containerized environments.
+    host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
-    uvicorn.run("app.main:app", host=host, port=port, log_level="info")
+    uvicorn.run("app.main:app", host=host, port=port, log_level="info", reload=False)
+
